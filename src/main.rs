@@ -1,32 +1,25 @@
-use tokio;
-use tokio_util::sync::CancellationToken;
-use std::time::Duration;
+use tokio::sync::mpsc;
+use tokio::time::{sleep, Duration};
 
 #[tokio::main]
 async fn main() {
-    // Создаем CancellationToken
-    let cancellation_token = CancellationToken::new();
-    let token = cancellation_token.clone();
+    let (tx, mut rx) = mpsc::channel(32);
 
-    // Запускаем асинхронную задачу
-    let handle = tokio::spawn(async move {
-        let mut interval = tokio::time::interval(Duration::from_secs(1));
-        loop {
-            tokio::select! {
-                _ = interval.tick() => {
-                    println!("Task is running");
-                }
-                _ = token.cancelled() => {
-                    println!("Task is cancelled");
-                    break;
-                }
-            }
+    // Запускаем задачу, которая будет обрабатывать сообщения
+    tokio::spawn(async move {
+        while let Some(message) = rx.recv().await {
+            println!("Получено сообщение: {:?}", message);
         }
+        println!("Канал закрыт, задача завершена.");
     });
 
-    // Запускаем основную задачу
-    tokio::time::sleep(Duration::from_secs(5)).await;
-    cancellation_token.cancel(); // Отправляем сигнал отмены
+    // Отправляем сообщения
+    tx.send("Привет".to_string()).await.unwrap();
+    tx.send("Мир".to_string()).await.unwrap();
 
-    handle.await.unwrap();
+    // Закрываем канал
+    drop(tx);
+
+    // Ждем немного, чтобы убедиться, что задача завершится после закрытия канала
+    sleep(Duration::from_secs(1)).await;
 }
